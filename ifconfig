@@ -1,0 +1,149 @@
+#!/bin/bash
+# ifconfig-style wrapper for Windows 7 network utilities
+# for use with cygwin
+# created 2013-01-01 agrinberg
+
+ipconfig="ipconfig"
+netsh="netsh"
+wmic="wmic"
+command="$ipconfig"
+
+# declare basic functions
+error() # error handler
+{
+    echo "$0: $1">&2
+}
+
+check_ip() # validates ip addresses. usage: check_ip ipaddress
+{
+    checkstring="\b(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
+    ip=$1
+    
+    echo $ip | egrep -q $checkstring
+    if [ $? -gt 0 ]; then
+        error "invalid ip address -- $ip"
+        exit 1
+    fi
+}
+
+# parse options and arguments
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        -a|--all)
+            command="$ipconfig /all"
+            ;;
+        -s|--short)
+            true # do nothing
+            ;;
+        -h|--help)
+            command="$ipconfig /?"
+            ;;
+        -v|--version)
+            echo "ifconfig-style wrapper for Windows 7 ipconfig, netsh, and wmic. Version 0.01"
+            exit 0
+            ;;
+        -*)
+            error "unknown option -- $1"
+            exit 1
+            ;;
+        netmask)
+            netmask=$2
+            shift
+            ;;
+        gateway)
+            gateway=$2
+            shift
+            ;;
+#        tftpserver)
+#            tftpserver=$2
+#            shift
+#            ;;
+#		 broadcast)
+#		     broadcast=$2
+#			 shift
+#			 ;;
+		up)
+            updown="up"
+            ;;
+        down)
+            updown="down"
+            ;;
+        *)
+            command=
+            interface="$1"
+            address=$2
+            shift
+            ;;
+    esac
+shift
+done
+
+# perform sanity check
+if [ ! "X$address" = "X" ]; then
+    case $address in
+        up)
+            updown="up"
+            address=
+            ;;
+        down)
+            updown="down"
+            address=
+            ;;
+        *)
+            check_ip $address
+            ;;
+    esac
+fi
+
+if [ ! "X$netmask" = "X" ]; then
+    check_ip $netmask
+fi
+
+if [ ! "X$gateway" = "X" ]; then
+    check_ip $gateway
+fi
+
+if [ ! "X$tftpserver" = "X" ]; then
+    check_ip $tftpserver
+fi
+
+if [ ! "X$broadcast" = "X" ]; then
+    check_ip $broadcast
+fi
+
+# prepare for execution
+if [ ! "X$address" = "X" ]; then
+    command="$netsh int ip set address \"$interface\" static $address $netmask $gateway"
+fi
+
+if [ ! "X$updown" = "X" ]; then
+    if [ $updown = "up" ]; then
+        command2="$wmic path win32_networkadapter where NetConnectionID="\"$interface\"" call enable"
+    elif [ $updown = "down" ]; then
+        command2="$wmic path win32_networkadapter where NetConnectionID="\"$interface\"" call disable"
+    fi
+fi
+
+# execute script
+#echo "Arguments: $@"
+#echo "Interface: \"$interface\""
+#echo "Address: $address"
+#echo "Netmask: $netmask"
+#echo "Gateway: $gateway"
+#echo "Tftpserver: $tftpserver"
+#echo "Broadcast: $broadcast"
+#echo "UpDown: $updown"
+#echo "Command: $command"
+#echo "Command2: $command2"
+
+if [ ! "X$command" = "X" ]; then
+    echo $command | cmd | tail -n +5 | sed -e '$d' -e '/^$/d'
+
+fi
+
+if [ ! "X$command2" = "X" ]; then
+    echo $command2 | cmd | tail -n +5 | sed -e '$d' -e '/^$/d'
+fi
+
+exit 0
